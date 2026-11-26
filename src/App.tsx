@@ -69,11 +69,13 @@ export default function App() {
   const [configCategory, setConfigCategory] = useState('Solicitação de professor');
   const [categoryDialog, setCategoryDialog] = useState<'category' | 'subcategory' | null>(null);
   const [categoryNameDraft, setCategoryNameDraft] = useState('');
-  const [categoryColorDraft, setCategoryColorDraft] = useState('#2875d7');
+  const [categoryColorDraft, setCategoryColorDraft] = useState('');
   const [categoryColors, setCategoryColors] = useState<Record<string, string>>(() => { try { return JSON.parse(localStorage.getItem('planner-category-colors-v1') || '{}'); } catch { return {}; } });
   const [taskCategorySelection, setTaskCategorySelection] = useState('Solicitação da gestão');
   const [modal, setModal] = useState<'task' | 'date' | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingImportantDateId, setEditingImportantDateId] = useState<string | null>(null);
+  const [importantDateDraftDate, setImportantDateDraftDate] = useState(dateKey(today));
   const [calendarView, setCalendarView] = useState<'Mês' | 'Semana' | 'Dia'>('Mês');
   const [notice, setNotice] = useState('');
   const [filter, setFilter] = useState<'Tudo' | 'Tarefas' | 'Datas importantes'>('Tudo');
@@ -556,6 +558,25 @@ export default function App() {
       accountId: account.id,
       userId: authUser!.uid,
     };
+    if (editingImportantDateId) {
+      const original = storedPlannerDates.find(item => item.id === editingImportantDateId);
+      if (!original) { showNotice('Não foi possível localizar essa data importante.'); return; }
+      try {
+        await updateDoc(doc(db, 'datas_importantes', editingImportantDateId), {
+          ...base, date: start, recurringForever: false, repeatType: null, repeatDays: [], updatedAt: new Date().toISOString()
+        });
+      } catch (error) {
+        showNotice(`Erro ao atualizar data: ${error instanceof Error ? error.message : 'falha no Firebase'}`);
+        return;
+      }
+      setModal(null);
+      setEditingImportantDateId(null);
+      setRecurring(false);
+      setRepeatForever(false);
+      setRepeatDays([]);
+      showNotice('Data importante atualizada.');
+      return;
+    }
     const newDates: ImportantDate[] = [];
     if (recurring && repeatForever) {
       newDates.push({ id: crypto.randomUUID(), date: start, recurringForever: true, repeatType, repeatDays: [...repeatDays], ...base });
@@ -662,6 +683,8 @@ export default function App() {
   }
 
   function openImportantDateModal() {
+    setEditingImportantDateId(null);
+    setImportantDateDraftDate(selectedDate);
     setRecurring(false);
     setRepeatDays([]);
     setRepeatType('yearly');
@@ -685,6 +708,36 @@ export default function App() {
     catch (error) { showNotice(`Erro ao excluir: ${error instanceof Error ? error.message : 'falha no Firebase'}`); }
   }
 
+  function editImportantDate(item: ImportantDate) {
+    // Datas de repetição contínua são ocorrências virtuais; edita-se o registro-base.
+    const baseId = item.id.includes('_') ? item.id.slice(0, item.id.lastIndexOf('_')) : item.id;
+    const original = storedPlannerDates.find(date => date.id === item.id) || storedPlannerDates.find(date => date.id === baseId) || item;
+    setEditingImportantDateId(original.id);
+    setImportantDateDraftDate(item.date);
+    setRecurring(false);
+    setRepeatForever(false);
+    setRepeatDays([]);
+    setRepeatUntil(item.date);
+    setModal('date');
+  }
+
+  async function deleteImportantDate(item: ImportantDate) {
+    const baseId = item.id.includes('_') ? item.id.slice(0, item.id.lastIndexOf('_')) : item.id;
+    const original = storedPlannerDates.find(date => date.id === item.id) || storedPlannerDates.find(date => date.id === baseId) || item;
+    const label = item.title;
+    if (!window.confirm(`Excluir a data importante "${label}"?${original.recurringForever ? ' Isso excluirá a repetição contínua.' : ''}`)) return;
+    try {
+      if (original.recurringForever) {
+        await deleteDoc(doc(db, 'datas_importantes', original.id));
+      } else {
+        await deleteDoc(doc(db, 'datas_importantes', original.id));
+      }
+      showNotice('Data importante excluída.');
+    } catch (error) {
+      showNotice(`Erro ao excluir: ${error instanceof Error ? error.message : 'falha no Firebase'}`);
+    }
+  }
+
   function toggleRepeatDay(day: number) {
     setRepeatDays(old => old.includes(day) ? old.filter(value => value !== day) : [...old, day]);
   }
@@ -694,7 +747,26 @@ export default function App() {
   const categoryColorKey = (planner: PlannerType, type: 'Tarefas' | 'Datas importantes', category: string, subcategory = '') => `${planner}|${type}|${category}|${subcategory}`;
   const getCategoryColor = (planner: PlannerType, type: 'Tarefas' | 'Datas importantes', category: string, subcategory = '') => categoryColors[categoryColorKey(planner, type, category, subcategory)] || '';
   const setCategoryColor = (key: string, color: string) => setCategoryColors(old => { const next = { ...old }; if (color) next[key] = color; else delete next[key]; return next; });
-  const colorStyle = (color: string): CSSProperties => color ? { backgroundColor: color, color: '#fff', borderColor: color } : {};
+  const colorStyle = (color: string): CSSProperties => {
+    if (!color) return {};
+    // Mantém o fundo escolhido e calcula uma cor de texto que contraste com ele.
+    const hex = color.replace('#', '');
+    if (!/^[0-9a-fA-F]{6}$/.test(hex)) return { backgroundColor: color, color: '#fff', borderColor: color };
+    const channels = [0, 2, 4].map(index => parseInt(hex.slice(index, index + 2), 16));
+    const linear = channels.map(value => {
+      const channel = value / 255;
+      return channel <= 0.04045 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+    });
+    const luminance = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+    // Fundos escuros/médios recebem texto claro da mesma família de cor;
+    // fundos claros recebem texto escuro da mesma família.
+    const mix = luminance < 0.55 ? 0.84 : -0.58;
+    const textChannels = channels.map(value => mix >= 0
+      ? Math.round(value + (255 - value) * mix)
+      : Math.round(value * (1 + mix)));
+    const textColor = `#${textChannels.map(value => value.toString(16).padStart(2, '0')).join('')}`;
+    return { backgroundColor: color, color: textColor, borderColor: color };
+  };
 
   const currentCategories = activePlanner === 'Profissional' ? professionalCategories : personalCategories;
   const setCurrentCategories = activePlanner === 'Profissional' ? setProfessionalCategories : setPersonalCategories;
@@ -709,18 +781,18 @@ export default function App() {
       if (configCategoryType === 'Tarefas') {
         if (currentCategories.some(item => item.name.toLowerCase() === name.toLowerCase())) { showNotice('Essa categoria já existe.'); return; }
         setCurrentCategories(old => [...old, { name, subcategories: [] }]);
-        setCategoryColor(categoryColorKey(activePlanner, 'Tarefas', name), categoryColorDraft);
+        if (categoryColorDraft) setCategoryColor(categoryColorKey(activePlanner, 'Tarefas', name), categoryColorDraft);
       } else {
         if (currentDateCategories.some(item => item.toLowerCase() === name.toLowerCase())) { showNotice('Essa categoria já existe.'); return; }
         setCurrentDateCategories(old => [...old, name]);
-        setCategoryColor(categoryColorKey(activePlanner, 'Datas importantes', name), categoryColorDraft);
+        if (categoryColorDraft) setCategoryColor(categoryColorKey(activePlanner, 'Datas importantes', name), categoryColorDraft);
       }
       setConfigCategory(name);
     } else if (categoryDialog === 'subcategory' && configCategory) {
       setCurrentCategories(old => old.map(item => item.name === configCategory && !item.subcategories.some(sub => sub.toLowerCase() === name.toLowerCase()) ? { ...item, subcategories: [...item.subcategories, name] } : item));
     }
     setCategoryNameDraft('');
-    setCategoryColorDraft(configCategoryType === 'Tarefas' ? '#2875d7' : '#ed941e');
+    setCategoryColorDraft('');
     setCategoryDialog(null);
   }
 
@@ -786,7 +858,7 @@ export default function App() {
               </button>)}</div>
               <div className="calendar-footer"><span><i className="dot-task"/> Tarefas</span><span><i className="dot-date"/> Datas importantes</span></div>
               <section className="selected-day-panel"><div className="selected-day-heading"><div><h3>{dateLabel(selectedDate)}</h3><p>Atividades e datas deste dia</p></div><button onClick={openTaskModal}>＋ Nova tarefa</button></div>
-                {selectedDayTasks.length === 0 && selectedDayDates.length === 0 ? <p className="selected-day-empty">Nenhuma tarefa ou data cadastrada para este dia.</p> : <div className="selected-day-list">{selectedDayTasks.map(task => <article className={`selected-day-item ${task.done ? 'is-done' : ''}`} key={task.id}><button className={`check-circle ${task.done ? 'checked' : ''}`} onClick={() => toggleTask(task.id)} aria-label={task.done ? 'Marcar como pendente' : 'Concluir tarefa'}>{task.done ? '✓' : ''}</button><div className="task-info"><b>{task.title}</b><div className="task-meta"><span>{task.time || 'Sem horário'}</span><span className="category-tag" style={colorStyle(getCategoryColor(task.planner, 'Tarefas', task.category, task.subcategory || '') || getCategoryColor(task.planner, 'Tarefas', task.category))}>{task.category}</span><span className={`priority priority-${task.priority.toLowerCase()}`}>{task.priority}</span></div>{task.note && <p>{task.note}</p>}</div><div className="task-row-actions"><button onClick={() => editTask(task)} aria-label="Editar tarefa" title="Editar">✎</button><button onClick={() => deleteTask(task)} aria-label="Excluir tarefa" title="Excluir">⌫</button></div></article>)}{selectedDayDates.map(item => <article className="selected-day-item important-day-item" key={item.id}><span className="important-star">☆</span><div className="task-info"><b>{item.title}</b><div className="task-meta"><span>Data importante</span><span className="category-tag" style={colorStyle(getCategoryColor(item.planner, 'Datas importantes', item.category) || '#ed941e')}>{item.category}</span></div>{item.note && <p>{item.note}</p>}</div></article>)}</div>}
+                {selectedDayTasks.length === 0 && selectedDayDates.length === 0 ? <p className="selected-day-empty">Nenhuma tarefa ou data cadastrada para este dia.</p> : <div className="selected-day-list">{selectedDayTasks.map(task => <article className={`selected-day-item ${task.done ? 'is-done' : ''}`} key={task.id}><button className={`check-circle ${task.done ? 'checked' : ''}`} onClick={() => toggleTask(task.id)} aria-label={task.done ? 'Marcar como pendente' : 'Concluir tarefa'}>{task.done ? '✓' : ''}</button><div className="task-info"><b>{task.title}</b><div className="task-meta"><span>{task.time || 'Sem horário'}</span><span className="category-tag" style={colorStyle(getCategoryColor(task.planner, 'Tarefas', task.category, task.subcategory || '') || getCategoryColor(task.planner, 'Tarefas', task.category))}>{task.category}</span><span className={`priority priority-${task.priority.toLowerCase()}`}>{task.priority}</span></div>{task.note && <p>{task.note}</p>}</div><div className="task-row-actions"><button onClick={() => editTask(task)} aria-label="Editar tarefa" title="Editar">✎</button><button onClick={() => deleteTask(task)} aria-label="Excluir tarefa" title="Excluir">⌫</button></div></article>)}{selectedDayDates.map(item => <article className="selected-day-item important-day-item" key={item.id}><span className="important-star">☆</span><div className="task-info"><b>{item.title}</b><div className="task-meta"><span>Data importante</span><span className="category-tag" style={colorStyle(getCategoryColor(item.planner, 'Datas importantes', item.category) || '#ed941e')}>{item.category}</span></div>{item.note && <p>{item.note}</p>}</div><div className="task-row-actions"><button onClick={() => editImportantDate(item)} aria-label="Editar data importante" title="Editar">✎</button><button onClick={() => deleteImportantDate(item)} aria-label="Excluir data importante" title="Excluir">⌫</button></div></article>)}</div>}
               </section>
             </section>
             <aside className="dashboard-side-column">
@@ -838,7 +910,7 @@ export default function App() {
             <div className="settings-category-tabs" role="tablist" aria-label="Tipo de categoria">
               {(['Tarefas', 'Datas importantes'] as const).map(type => <button type="button" role="tab" aria-selected={configCategoryType === type} key={type} className={configCategoryType === type ? 'active' : ''} onClick={() => { setConfigCategoryType(type); setConfigCategory(''); }}>{type === 'Tarefas' ? 'Categorias de tarefas' : 'Categorias de datas importantes'}</button>)}
             </div>
-            <div className="settings-category-toolbar"><div><b>{configCategoryType === 'Tarefas' ? 'Categorias das tarefas' : 'Categorias das datas importantes'}</b><span>{configCategoryType === 'Tarefas' ? 'Classifique atividades por assunto e use subcategorias quando precisar.' : 'Organize aniversários, datas comemorativas, feriados e eventos.'}</span></div><button type="button" className="primary-button" onClick={() => { setCategoryNameDraft(''); setCategoryColorDraft(configCategoryType === 'Tarefas' ? '#2875d7' : '#ed941e'); setCategoryDialog('category'); }}>＋ Nova categoria</button></div>
+            <div className="settings-category-toolbar"><div><b>{configCategoryType === 'Tarefas' ? 'Categorias das tarefas' : 'Categorias das datas importantes'}</b><span>{configCategoryType === 'Tarefas' ? 'Classifique atividades por assunto e use subcategorias quando precisar.' : 'Organize aniversários, datas comemorativas, feriados e eventos.'}</span></div><button type="button" className="primary-button" onClick={() => { setCategoryNameDraft(''); setCategoryColorDraft(''); setCategoryDialog('category'); }}>＋ Nova categoria</button></div>
             {configCategoryType === 'Tarefas' ? <div className="settings-category-layout">
               <div className="settings-category-list">{currentCategories.map(category => <div className={`settings-category-row ${configCategory === category.name ? 'selected' : ''}`} key={category.name}><button type="button" onClick={() => setConfigCategory(category.name)}>{category.name}<small>{category.subcategories.length} subcategoria(s)</small></button><button type="button" aria-label={`Excluir ${category.name}`} onClick={() => { if (window.confirm(`Excluir a categoria "${category.name}"?`)) { setCurrentCategories(old => old.filter(c => c.name !== category.name)); if (configCategory === category.name) setConfigCategory(''); } }}>⌫</button></div>)}{currentCategories.length === 0 && <p className="settings-empty">Nenhuma categoria cadastrada.</p>}</div>
               <div className="settings-subcategories"><h3>{configCategory || 'Selecione uma categoria'}</h3><p>As subcategorias ajudam a detalhar melhor cada tarefa.</p>{currentCategories.find(c => c.name === configCategory)?.subcategories.map(sub => <div className="settings-sub-row" key={sub}><span>{sub}</span><div className="category-color-control" title="Escolher cor da subcategoria"><input aria-label={`Cor da subcategoria ${sub}`} type="color" value={getCategoryColor(activePlanner, 'Tarefas', configCategory, sub) || '#2875d7'} onChange={event => setCategoryColor(categoryColorKey(activePlanner, 'Tarefas', configCategory, sub), event.target.value)}/><button type="button" onClick={() => setCategoryColor(categoryColorKey(activePlanner, 'Tarefas', configCategory, sub), '')}>Padrão</button></div><button type="button" onClick={() => setCurrentCategories(old => old.map(c => c.name === configCategory ? {...c, subcategories:c.subcategories.filter(x => x !== sub)} : c))}>Excluir</button></div>)}{configCategory && <button className="secondary-action" type="button" onClick={() => { setCategoryNameDraft(''); setCategoryDialog('subcategory'); }}>＋ Adicionar subcategoria</button>}</div>
@@ -848,7 +920,7 @@ export default function App() {
 
         {section === 'Anotações' && <section className="panel annotations-panel"><div className="annotation-toolbar"><div><h2>Suas anotações</h2><p>Adicione tarefas, repetições e datas que deseja guardar.</p></div><div className="filter-pills">{(['Tudo', 'Tarefas', 'Datas importantes'] as const).map(value => <button key={value} className={filter === value ? 'selected' : ''} onClick={() => setFilter(value)}>{value}</button>)}</div></div>
           {(filter === 'Tudo' || filter === 'Tarefas') && <div className="annotation-section"><div className="annotation-section-title"><h3>Tarefas</h3><span>{filteredTasks.length}</span><button onClick={openTaskModal}>＋ Nova tarefa</button></div>{filteredTasks.length === 0 ? <p className="quiet-empty">Você ainda não adicionou tarefas.</p> : <div className="annotation-list">{[...filteredTasks].sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)).map(task => <article className={`task-item ${task.done ? 'is-done' : ''}`} key={task.id}><button className={`check-circle ${task.done ? 'checked' : ''}`} onClick={() => toggleTask(task.id)}>{task.done ? '✓' : ''}</button><div className="task-info"><b>{task.title}</b><div className="task-meta"><span>{dateLabel(task.date)}{task.time ? ` · ${task.time}` : ''}</span><span className="category-tag" style={colorStyle(getCategoryColor(task.planner, 'Tarefas', task.category, task.subcategory || '') || getCategoryColor(task.planner, 'Tarefas', task.category))}>{task.category}</span>{task.seriesId && <span className="repeat-tag">↻ Recorrente</span>}</div>{task.note && <p>{task.note}</p>}</div><span className={`priority priority-${task.priority.toLowerCase()}`}>{task.priority}</span><div className="task-row-actions"><button onClick={() => editTask(task)} aria-label="Editar tarefa" title="Editar">✎</button><button onClick={() => deleteTask(task)} aria-label="Excluir tarefa" title="Excluir">⌫</button></div></article>)}</div>}</div>}
-          {(filter === 'Tudo' || filter === 'Datas importantes') && <div className="annotation-section"><div className="annotation-section-title"><h3>Datas importantes</h3><span>{filteredDates.length}</span><button onClick={openImportantDateModal}>＋ Nova data</button></div>{filteredDates.length === 0 ? <p className="quiet-empty">Você ainda não adicionou datas importantes.</p> : <div className="important-list annotation-list">{[...filteredDates].sort((a, b) => a.date.localeCompare(b.date)).map(item => <article className="important-item" key={item.id}><div className="date-tile" style={colorStyle(getCategoryColor(item.planner, 'Datas importantes', item.category) || '#ed941e')}><b>{new Date(`${item.date}T12:00:00`).getDate()}</b><span>{new Date(`${item.date}T12:00:00`).toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}</span></div><div><b>{item.title}</b><small>{dateLabel(item.date)} · {item.category}{item.seriesId ? ' · ↻ Recorrente' : ''}</small>{item.note && <p>{item.note}</p>}</div></article>)}</div>}</div>}
+          {(filter === 'Tudo' || filter === 'Datas importantes') && <div className="annotation-section"><div className="annotation-section-title"><h3>Datas importantes</h3><span>{filteredDates.length}</span><button onClick={openImportantDateModal}>＋ Nova data</button></div>{filteredDates.length === 0 ? <p className="quiet-empty">Você ainda não adicionou datas importantes.</p> : <div className="important-list annotation-list">{[...filteredDates].sort((a, b) => a.date.localeCompare(b.date)).map(item => <article className="important-item" key={item.id}><div className="date-tile" style={colorStyle(getCategoryColor(item.planner, 'Datas importantes', item.category) || '#ed941e')}><b>{new Date(`${item.date}T12:00:00`).getDate()}</b><span>{new Date(`${item.date}T12:00:00`).toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}</span></div><div><b>{item.title}</b><small>{dateLabel(item.date)} · {item.category}{item.seriesId ? ' · ↻ Recorrente' : ''}</small>{item.note && <p>{item.note}</p>}</div><div className="task-row-actions"><button onClick={() => editImportantDate(item)} aria-label="Editar data importante" title="Editar">✎</button><button onClick={() => deleteImportantDate(item)} aria-label="Excluir data importante" title="Excluir">⌫</button></div></article>)}</div>}</div>}
         </section>}
         <footer className="footer-note">Seu espaço, seu ritmo <span>✦</span></footer>
       </div>
@@ -865,8 +937,8 @@ export default function App() {
         {recurring && <div className="recurrence-options"><label>Frequência<select value={repeatType} onChange={event => setRepeatType(event.target.value as 'weekly' | 'monthly' | 'yearly')}><option value="weekly">Semanalmente</option><option value="monthly">Mensalmente</option><option value="yearly">Anualmente</option></select></label>{repeatType === 'weekly' && <><span className="field-caption">Repetir toda semana nos dias:</span><div className="weekday-picker">{weekdays.map((day, index) => <button type="button" key={day} className={repeatDays.includes(index) ? 'day-selected' : ''} onClick={() => toggleRepeatDay(index)}>{day}</button>)}</div></>}{repeatType === 'monthly' && <small className="recurrence-hint">A tarefa será repetida todo dia {Number(taskStartDate.slice(8, 10))} de cada mês.</small>}{repeatType === 'yearly' && <small className="recurrence-hint">A tarefa será repetida todo dia {Number(taskStartDate.slice(8, 10))} de {new Date(`${taskStartDate}T12:00:00`).toLocaleDateString('pt-BR', { month: 'long' })}, todos os anos.</small>}<label>Repetir até<input name="until" type="date" min={taskStartDate} value={repeatUntil} onChange={event => setRepeatUntil(event.target.value)}/></label><small className="recurrence-hint">{repeatType === 'weekly' ? 'Serão criadas tarefas nos dias da semana selecionados.' : repeatType === 'monthly' ? 'Serão criadas tarefas no mesmo dia de cada mês, até a data final.' : 'Serão criadas tarefas na mesma data, todos os anos, até a data final.'}</small></div>}
       </div>}<div className="modal-actions"><button type="button" className="cancel-button" onClick={() => { setModal(null); setEditingTaskId(null); }}>Cancelar</button><button className="primary-button" type="submit">{editingTaskId ? 'Salvar alterações' : 'Salvar tarefa'}</button></div></form></div>}
 
-    {modal === 'date' && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setModal(null); }}><form className="task-modal" onSubmit={addImportantDate}><div className="modal-top"><div><span className="eyebrow">GUARDE A DATA</span><h2>Nova data importante</h2></div><button type="button" className="close-modal" onClick={() => setModal(null)}>×</button></div><label>Nome da data<input name="title" placeholder="Ex.: Aniversário, reunião, evento..." required autoFocus/></label><div className="form-two"><label>Data<input name="date" type="date" defaultValue={selectedDate} onChange={event => { if (repeatUntil < event.target.value) setRepeatUntil(event.target.value); }} required/></label><label>Categoria<select name="category" defaultValue={currentDateCategories[0] || 'Outros'}>{currentDateCategories.map(category => <option key={category} value={category}>{category}</option>)}</select></label></div><div className="recurrence-box"><label className="recurrence-toggle"><input type="checkbox" checked={recurring} onChange={event => { setRecurring(event.target.checked); setRepeatDays([]); }}/> <span><b>Repetir esta data</b><small>Escolha a frequência da repetição</small></span></label>{recurring && <div className="recurrence-options"><label>Frequência<select value={repeatType} onChange={event => setRepeatType(event.target.value as 'weekly' | 'monthly' | 'yearly')}><option value="weekly">Semanalmente</option><option value="monthly">Mensalmente</option><option value="yearly">Anualmente</option></select></label>{repeatType === 'weekly' && <><span className="field-caption">Repetir toda semana nos dias:</span><div className="weekday-picker">{weekdays.map((day, index) => <button type="button" key={day} className={repeatDays.includes(index) ? 'day-selected' : ''} onClick={() => toggleRepeatDay(index)}>{day}</button>)}</div></>}{repeatType === 'monthly' && <small className="recurrence-hint">A data será repetida no mesmo dia de cada mês.</small>}{repeatType === 'yearly' && <small className="recurrence-hint">A data será repetida no mesmo dia e mês, todos os anos.</small>}<label className="recurrence-toggle"><input type="checkbox" checked={repeatForever} onChange={event => setRepeatForever(event.target.checked)}/> <span><b>Repetir sempre</b><small>Sem data final: a data continuará se repetindo enquanto você usar o Planner.</small></span></label>{!repeatForever && <label>Repetir até<input name="until" type="date" min={selectedDate} value={repeatUntil} onChange={event => setRepeatUntil(event.target.value)}/></label>}</div>}</div><label>Observações<textarea name="note" rows={3} placeholder="Detalhes adicionais (opcional)"/></label><div className="modal-actions"><button type="button" className="cancel-button" onClick={() => setModal(null)}>Cancelar</button><button className="primary-button" type="submit">Salvar data</button></div></form></div>}
-    {categoryDialog && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setCategoryDialog(null); }}><form className="task-modal category-dialog" onSubmit={saveCategoryDialog}><div className="modal-top"><div><span className="eyebrow">CONFIGURAÇÕES DO PLANNER</span><h2>{categoryDialog === 'category' ? 'Adicionar categoria' : 'Adicionar subcategoria'}</h2></div><button type="button" className="close-modal" onClick={() => setCategoryDialog(null)}>×</button></div><p className="category-dialog-description">{categoryDialog === 'category' ? `A categoria ficará disponível em ${configCategoryType.toLowerCase()} do Planner ${activePlanner.toLowerCase()}.` : `A subcategoria será adicionada em “${configCategory}”.`}</p><label>Nome<input value={categoryNameDraft} onChange={event => setCategoryNameDraft(event.target.value)} placeholder={categoryDialog === 'category' ? 'Digite o nome da categoria' : 'Digite o nome da subcategoria'} required autoFocus maxLength={45}/></label>{categoryDialog === 'category' && <label className="category-color-picker-label">Cor da categoria <span className="category-color-picker"><input aria-label="Selecionar cor da categoria" type="color" value={categoryColorDraft} onChange={event => setCategoryColorDraft(event.target.value)}/><span>{categoryColorDraft.toUpperCase()}</span></span><small>Você pode manter a cor padrão ou escolher outra.</small></label>}<div className="modal-actions"><button type="button" className="cancel-button" onClick={() => setCategoryDialog(null)}>Cancelar</button><button className="primary-button" type="submit">Salvar</button></div></form></div>}
+    {modal === 'date' && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setModal(null); }}><form className="task-modal" onSubmit={addImportantDate}><div className="modal-top"><div><span className="eyebrow">GUARDE A DATA</span><h2>{editingImportantDateId ? 'Editar data importante' : 'Nova data importante'}</h2></div><button type="button" className="close-modal" onClick={() => setModal(null)}>×</button></div><label>Nome da data<input name="title" defaultValue={editingImportantDateId ? storedPlannerDates.find(item => item.id === editingImportantDateId)?.title || '' : ''} placeholder="Ex.: Aniversário, reunião, evento..." required autoFocus/></label><div className="form-two"><label>Data<input name="date" type="date" value={importantDateDraftDate} onChange={event => { setImportantDateDraftDate(event.target.value); if (repeatUntil < event.target.value) setRepeatUntil(event.target.value); }} required/></label><label>Categoria<select name="category" defaultValue={editingImportantDateId ? storedPlannerDates.find(item => item.id === editingImportantDateId)?.category || currentDateCategories[0] || 'Outros' : currentDateCategories[0] || 'Outros'}>{currentDateCategories.map(category => <option key={category} value={category}>{category}</option>)}</select></label></div>{!editingImportantDateId && <div className="recurrence-box"><label className="recurrence-toggle"><input type="checkbox" checked={recurring} onChange={event => { setRecurring(event.target.checked); setRepeatDays([]); }}/> <span><b>Repetir esta data</b><small>Escolha a frequência da repetição</small></span></label>{recurring && <div className="recurrence-options"><label>Frequência<select value={repeatType} onChange={event => setRepeatType(event.target.value as 'weekly' | 'monthly' | 'yearly')}><option value="weekly">Semanalmente</option><option value="monthly">Mensalmente</option><option value="yearly">Anualmente</option></select></label>{repeatType === 'weekly' && <><span className="field-caption">Repetir toda semana nos dias:</span><div className="weekday-picker">{weekdays.map((day, index) => <button type="button" key={day} className={repeatDays.includes(index) ? 'day-selected' : ''} onClick={() => toggleRepeatDay(index)}>{day}</button>)}</div></>}{repeatType === 'monthly' && <small className="recurrence-hint">A data será repetida no mesmo dia de cada mês.</small>}{repeatType === 'yearly' && <small className="recurrence-hint">A data será repetida no mesmo dia e mês, todos os anos.</small>}<label className="recurrence-toggle"><input type="checkbox" checked={repeatForever} onChange={event => setRepeatForever(event.target.checked)}/> <span><b>Repetir sempre</b><small>Sem data final: a data continuará se repetindo enquanto você usar o Planner.</small></span></label>{!repeatForever && <label>Repetir até<input name="until" type="date" min={selectedDate} value={repeatUntil} onChange={event => setRepeatUntil(event.target.value)}/></label>}</div>}</div>}<label>Observações<textarea name="note" defaultValue={editingImportantDateId ? storedPlannerDates.find(item => item.id === editingImportantDateId)?.note || '' : ''} rows={3} placeholder="Detalhes adicionais (opcional)"/></label><div className="modal-actions"><button type="button" className="cancel-button" onClick={() => { setModal(null); setEditingImportantDateId(null); }}>Cancelar</button><button className="primary-button" type="submit">{editingImportantDateId ? 'Salvar alterações' : 'Salvar data'}</button></div></form></div>}
+    {categoryDialog && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setCategoryDialog(null); }}><form className="task-modal category-dialog" onSubmit={saveCategoryDialog}><div className="modal-top"><div><span className="eyebrow">CONFIGURAÇÕES DO PLANNER</span><h2>{categoryDialog === 'category' ? 'Adicionar categoria' : 'Adicionar subcategoria'}</h2></div><button type="button" className="close-modal" onClick={() => setCategoryDialog(null)}>×</button></div><p className="category-dialog-description">{categoryDialog === 'category' ? `A categoria ficará disponível em ${configCategoryType.toLowerCase()} do Planner ${activePlanner.toLowerCase()}.` : `A subcategoria será adicionada em “${configCategory}”.`}</p><label>Nome<input value={categoryNameDraft} onChange={event => setCategoryNameDraft(event.target.value)} placeholder={categoryDialog === 'category' ? 'Digite o nome da categoria' : 'Digite o nome da subcategoria'} required autoFocus maxLength={45}/></label>{categoryDialog === 'category' && <label className="category-color-picker-label">Cor da categoria <span className="category-color-picker"><input aria-label="Selecionar cor da categoria" type="color" value={categoryColorDraft || (configCategoryType === 'Tarefas' ? '#2875d7' : '#ed941e')} onChange={event => setCategoryColorDraft(event.target.value)}/><span>{(categoryColorDraft || (configCategoryType === 'Tarefas' ? '#2875d7' : '#ed941e')).toUpperCase()}</span></span><small>Você pode manter a cor padrão ou escolher outra.</small></label>}<div className="modal-actions"><button type="button" className="cancel-button" onClick={() => setCategoryDialog(null)}>Cancelar</button><button className="primary-button" type="submit">Salvar</button></div></form></div>}
 
   </div>;
 }
