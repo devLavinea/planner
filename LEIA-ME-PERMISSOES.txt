@@ -1,0 +1,17 @@
+CORREÇÃO DO ERRO: Missing or insufficient permissions (Tarefas)
+
+1. Abra o Firebase Console e confirme que o projeto selecionado é planner-159.
+2. Entre em Firestore Database > Regras.
+3. Substitua TODO o conteúdo das regras pelo conteúdo do arquivo firestore.rules desta pasta.
+4. Clique em Publicar e aguarde a confirmação.
+5. Confirme que o banco selecionado é (default).
+6. Confirme que o arquivo .env.local está na raiz do projeto e aponta para planner-159.
+7. Reinicie o projeto (Ctrl+C e npm run dev) ou publique novamente o site.
+
+IMPORTANTE SOBRE OS REGISTROS:
+- O aplicativo salva novas tarefas e datas com userId = UID do usuário autenticado.
+- As regras permitem consultar registros por userId e localizar registros antigos do próprio usuário por ownerUid, para migração.
+- Um documento antigo que não tenha userId nem ownerUid não pode ser atribuído automaticamente com segurança. Nesse caso, identifique o proprietário antes de preencher userId.
+- O campo userId deve ser do tipo string e conter o UID real, não pode ficar vazio ou null.
+
+As regras NÃO liberam leitura pública. Cada pessoa só pode acessar documentos cujo userId ou ownerUid corresponda ao UID da sessão autenticada.

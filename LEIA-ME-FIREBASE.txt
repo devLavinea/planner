@@ -1,0 +1,46 @@
+PLANNER — CONFIGURAÇÃO DO FIREBASE (CADASTRO ABERTO)
+
+O Planner não exige mais que o e-mail seja cadastrado previamente no Firestore.
+Qualquer pessoa pode criar uma conta pela tela inicial. Depois da autenticação,
+o aplicativo cria automaticamente o próprio perfil em contas/{UID}.
+
+1) CONFIGURAÇÃO WEB
+- Abra o projeto Firebase correto (neste caso, planner-159).
+- Vá a Configurações do projeto > Geral > Seus apps > aplicativo Web.
+- Copie os valores reais do SDK para o arquivo .env.local, na raiz do projeto,
+  ao lado de package.json.
+- Não reutilize chaves de outro projeto.
+
+2) AUTHENTICATION
+- Em Authentication > Sign-in method, habilite E-mail/senha.
+- Habilite Google se quiser permitir cadastro/login com Google.
+- Em Authentication > Settings > Authorized domains, confirme que o domínio
+  onde o Planner será publicado está autorizado.
+
+3) FIRESTORE RULES
+- Abra Firestore Database > Regras.
+- Copie o conteúdo integral de firestore.rules e clique em Publicar.
+- A coleção usada pelo aplicativo é exatamente: contas (tudo minúsculo).
+- O perfil é criado automaticamente em contas/{UID do Authentication}.
+- Tarefas e datas são gravadas com ownerUid para que cada usuário veja somente
+  seus próprios registros.
+
+4) ARQUIVO .env.local
+Crie .env.local na mesma pasta de package.json. Use os valores reais copiados
+no console Firebase. Não coloque este arquivo em src/.
+
+5) EXECUTAR
+  npm install
+  npm run dev
+
+Para publicar uma nova versão:
+  npm run build
+
+Se o site estiver hospedado, cadastre as mesmas variáveis VITE_FIREBASE_*
+nas configurações da hospedagem e faça um novo deploy.
+
+OBSERVAÇÃO SOBRE DADOS ANTIGOS
+Registros antigos de tarefas e datas que não possuem ownerUid não serão
+retornados pelas consultas protegidas desta versão. Eles precisam ser migrados
+para receber o UID correto do proprietário antes de reaparecerem no Planner.
+Não apague os documentos antigos antes de fazer backup/migração.

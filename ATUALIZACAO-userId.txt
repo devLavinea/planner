@@ -1,0 +1,22 @@
+ATUALIZAÇÃO — VÍNCULO DOS DADOS AO USUÁRIO
+
+O Planner agora utiliza o campo `userId` (string) nas coleções:
+- tarefas
+- datas_importantes
+
+O valor é preenchido automaticamente com auth.currentUser.uid ao criar tarefas,
+datas importantes e tarefas criadas por comando de voz. As consultas carregam
+somente documentos cujo userId corresponde ao UID autenticado.
+
+MIGRAÇÃO DE DADOS ANTIGOS
+Ao entrar, o Planner procura registros antigos que tenham ownerUid igual ao UID
+logado e preenche userId automaticamente. Para isso, publique as regras do arquivo
+firestore.rules no Firebase Console (Firestore Database > Regras).
+
+IMPORTANTE
+Registros antigos que não tenham nem userId nem ownerUid não podem ser associados
+a uma pessoa automaticamente; será necessário identificar o proprietário antes
+de migrá-los.
+
+A coleção `contas` continua usando ownerUid, pois este ajuste é específico para
+tarefas e datas importantes.

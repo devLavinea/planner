@@ -1,0 +1,45 @@
+{
+  "name": "planner",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "exceljs": "^4.4.0",
+    "firebase": "^12.4.0",
+    "firebase-admin": "^14.5.1",
+    "firebase-functions": "^7.4.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
+    "jszip": "^3.10.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwindcss": "^4.3.3",
+    "xlsx-js-style": "^1.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.0",
+    "eslint": "^10.9.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.4",
+    "globals": "^17.11.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.67.0",
+    "vite": "^8.2.2"
+  },
+  "description": "- A primeira página do site é a tela de autenticação Google. - Ao entrar com Google, o aplicativo consulta `Contas/{uid}` no Firestore. - O planner só é liberado quando esse documento existe e o campo `email` corresponde ao e-mail autenticado. - Se ainda não existir cadastro, a tela oferece **Criar minha conta**. Ao confirmar, cria `Contas/{uid}` com `email`, `name`, `id`, `color` e `createdAt`. - A sessão usa `browserLocalPersistence` e permanece no navegador até o usuário clicar em **Sair** (ou limpar/revogar a sessão no navegador/Google).",
+  "main": "eslint.config.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

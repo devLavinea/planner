@@ -1,0 +1,15 @@
+CONFIGURAÇÃO DO FIREBASE
+
+1. Abra o Firebase Console e selecione o projeto correto (planner-159).
+2. Vá em Configurações do projeto > Geral > Seus apps > aplicativo Web.
+3. Copie a configuração SDK para .env.local na raiz do projeto, ao lado de package.json.
+4. Em Authentication > Sign-in method, habilite E-mail/senha e, opcionalmente, Google.
+5. Em Firestore > Regras, publique o conteúdo de firestore.rules.
+6. Reinicie o servidor: Ctrl+C e npm run dev.
+
+O cadastro é aberto: não é necessário criar previamente um documento de e-mail
+na coleção contas. O próprio aplicativo cria contas/{UID} após o primeiro login
+ou cadastro bem-sucedido no Firebase Authentication.
+
+Se o site estiver publicado, configure as variáveis VITE_FIREBASE_* na hospedagem
+e faça um novo deploy. Alterar .env.local localmente não altera o site publicado.

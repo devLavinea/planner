@@ -1,0 +1,14 @@
+ELEMENTOS VETORIAIS INTEGRADOS
+
+Os elementos foram convertidos em paths SVG e incorporados ao código em src/DecorativePaths.tsx.
+
+Componentes:
+- PlannerLogoPaths: calendário, marcações amarelas, lettering Planner e Organize seu dia.
+- YouCanPaths: frase Você consegue, sublinhado e coração branco.
+- YellowHeartPath: coração amarelo do cabeçalho.
+- SloganPaths: Sonhe, planeje, conquiste, com letras brancas e amarelas e traços decorativos.
+- TargetPaths: alvo, flecha e lettering Você está no caminho certo.
+
+Os componentes são importados e utilizados diretamente em src/App.tsx. Não são imagens externas.
+
+Observação de validação: a compilação não pôde ser concluída neste ambiente porque faltam pacotes do projeto (vite/client, @types/node e dependências npm). Execute npm install e npm run build no ambiente de desenvolvimento para validar a compilação.
