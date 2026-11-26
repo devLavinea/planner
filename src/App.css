@@ -618,3 +618,8 @@ body, button, input, select, textarea { font-size: 15px; }
     width: 100%;
   }
 }
+
+
+/* Melhor leitura de anotações longas e preservação dos parágrafos digitados. */
+.task-modal .task-notes-input { min-height: 150px; height: 150px; line-height: 1.55; resize: vertical; white-space: pre-wrap; }
+.task-info p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; }
