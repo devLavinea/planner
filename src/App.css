@@ -598,3 +598,23 @@ body, button, input, select, textarea { font-size: 15px; }
     display: none !important;
   }
 }
+
+/* No celular, próximas atividades aparecem antes do calendário e do checklist do dia. */
+@media (max-width: 760px) {
+  .dashboard-main-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+  .dashboard-side-column {
+    display: contents !important;
+  }
+  .upcoming-panel {
+    order: -1;
+    width: 100%;
+  }
+  .calendar-panel {
+    order: 0;
+    width: 100%;
+  }
+}
