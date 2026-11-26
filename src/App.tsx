@@ -67,6 +67,8 @@ export default function App() {
   const [personalDateCategories, setPersonalDateCategories] = useState<string[]>(['Aniversários', 'Família', 'Saúde', 'Comemorações', 'Compromissos', 'Outros']);
   const [configCategoryType, setConfigCategoryType] = useState<'Tarefas' | 'Datas importantes'>('Tarefas');
   const [configCategory, setConfigCategory] = useState('Solicitação de professor');
+  const [categoryDialog, setCategoryDialog] = useState<'category' | 'subcategory' | null>(null);
+  const [categoryNameDraft, setCategoryNameDraft] = useState('');
   const [taskCategorySelection, setTaskCategorySelection] = useState('Solicitação da gestão');
   const [modal, setModal] = useState<'task' | 'date' | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -656,6 +658,26 @@ export default function App() {
   const currentDateCategories = activePlanner === 'Profissional' ? professionalDateCategories : personalDateCategories;
   const setCurrentDateCategories = activePlanner === 'Profissional' ? setProfessionalDateCategories : setPersonalDateCategories;
 
+  function saveCategoryDialog(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = categoryNameDraft.trim();
+    if (!name) return;
+    if (categoryDialog === 'category') {
+      if (configCategoryType === 'Tarefas') {
+        if (currentCategories.some(item => item.name.toLowerCase() === name.toLowerCase())) { showNotice('Essa categoria já existe.'); return; }
+        setCurrentCategories(old => [...old, { name, subcategories: [] }]);
+      } else {
+        if (currentDateCategories.some(item => item.toLowerCase() === name.toLowerCase())) { showNotice('Essa categoria já existe.'); return; }
+        setCurrentDateCategories(old => [...old, name]);
+      }
+      setConfigCategory(name);
+    } else if (categoryDialog === 'subcategory' && configCategory) {
+      setCurrentCategories(old => old.map(item => item.name === configCategory && !item.subcategories.some(sub => sub.toLowerCase() === name.toLowerCase()) ? { ...item, subcategories: [...item.subcategories, name] } : item));
+    }
+    setCategoryNameDraft('');
+    setCategoryDialog(null);
+  }
+
   if (authLoading) return <div className="auth-screen"><div className="auth-card"><img className="auth-brand-logo" src={plannerLogo} alt="Planner — Organize seu dia" /><h1>Planner</h1><p>Verificando sua sessão...</p><div className="auth-spinner"/></div></div>;
 
   if (!authUser) return <div className="auth-screen">
@@ -765,24 +787,16 @@ export default function App() {
               {passwordMessage && <p className="password-feedback success">{passwordMessage}</p>}
             </div>
           </div>
-          <div className="annotation-section">
-            <div className="annotation-section-title"><h3>Categorias</h3></div>
-            <div className="filter-pills settings-category-tabs">
-              {(['Tarefas', 'Datas importantes'] as const).map(type => <button type="button" key={type} className={configCategoryType === type ? 'selected' : ''} onClick={() => setConfigCategoryType(type)}>{type}</button>)}
+          <div className="annotation-section settings-categories-section">
+            <div className="annotation-section-title"><div><h3>Categorias</h3><p>Gerencie separadamente as categorias de tarefas e de datas importantes.</p></div></div>
+            <div className="settings-category-tabs" role="tablist" aria-label="Tipo de categoria">
+              {(['Tarefas', 'Datas importantes'] as const).map(type => <button type="button" role="tab" aria-selected={configCategoryType === type} key={type} className={configCategoryType === type ? 'active' : ''} onClick={() => { setConfigCategoryType(type); setConfigCategory(''); }}>{type === 'Tarefas' ? 'Categorias de tarefas' : 'Categorias de datas importantes'}</button>)}
             </div>
-            {configCategoryType === 'Tarefas' ? <>
-              <div className="annotation-section-title"><span>Organize as categorias usadas nas tarefas.</span><button type="button" onClick={() => { const name = window.prompt('Nome da nova categoria de tarefa:'); if (name?.trim()) setCurrentCategories(old => old.some(c => c.name.toLowerCase() === name.trim().toLowerCase()) ? old : [...old, {name:name.trim(), subcategories:[]}]); }}>＋ Adicionar categoria</button></div>
-              <div className="settings-category-layout">
-                <div className="settings-category-list">{currentCategories.map(category => <div className={`settings-category-row ${configCategory === category.name ? 'selected' : ''}`} key={category.name}><button type="button" onClick={() => setConfigCategory(category.name)}>{category.name}<small>{category.subcategories.length} subcategoria(s)</small></button><button type="button" aria-label={`Excluir ${category.name}`} onClick={() => { if (window.confirm(`Excluir a categoria "${category.name}"?`)) { setCurrentCategories(old => old.filter(c => c.name !== category.name)); if (configCategory === category.name) setConfigCategory(''); } }}>⌫</button></div>)}</div>
-                <div className="settings-subcategories"><h3>{configCategory || 'Selecione uma categoria'}</h3><p>As subcategorias aparecem ao selecionar a categoria ao criar uma tarefa.</p>
-                  {currentCategories.find(c => c.name === configCategory)?.subcategories.map(sub => <div className="settings-sub-row" key={sub}><span>{sub}</span><button type="button" onClick={() => setCurrentCategories(old => old.map(c => c.name === configCategory ? {...c, subcategories:c.subcategories.filter(x => x !== sub)} : c))}>Excluir</button></div>)}
-                  {configCategory && <button className="secondary-action" type="button" onClick={() => { const name = window.prompt(`Nova subcategoria para "${configCategory}":`); if (name?.trim()) setCurrentCategories(old => old.map(c => c.name === configCategory && !c.subcategories.some(x => x.toLowerCase() === name.trim().toLowerCase()) ? {...c, subcategories:[...c.subcategories,name.trim()]} : c)); }}>＋ Adicionar subcategoria</button>}
-                </div>
-              </div>
-            </> : <>
-              <div className="annotation-section-title"><span>Organize as categorias usadas nas datas importantes.</span><button type="button" onClick={() => { const name = window.prompt('Nome da nova categoria de data importante:'); if (name?.trim()) setCurrentDateCategories(old => old.some(item => item.toLowerCase() === name.trim().toLowerCase()) ? old : [...old, name.trim()]); }}>＋ Adicionar categoria</button></div>
-              <div className="settings-category-list">{currentDateCategories.map(category => <div className="settings-category-row" key={category}><button type="button" onClick={() => showNotice(`Categoria de data importante: ${category}`)}>{category}<small>Datas importantes</small></button><button type="button" aria-label={`Excluir ${category}`} onClick={() => { if (window.confirm(`Excluir a categoria "${category}"?`)) setCurrentDateCategories(old => old.filter(item => item !== category)); }}>⌫</button></div>)}</div>
-            </>}
+            <div className="settings-category-toolbar"><div><b>{configCategoryType === 'Tarefas' ? 'Categorias das tarefas' : 'Categorias das datas importantes'}</b><span>{configCategoryType === 'Tarefas' ? 'Classifique atividades por assunto e use subcategorias quando precisar.' : 'Organize aniversários, datas comemorativas, feriados e eventos.'}</span></div><button type="button" className="primary-button" onClick={() => { setCategoryNameDraft(''); setCategoryDialog('category'); }}>＋ Nova categoria</button></div>
+            {configCategoryType === 'Tarefas' ? <div className="settings-category-layout">
+              <div className="settings-category-list">{currentCategories.map(category => <div className={`settings-category-row ${configCategory === category.name ? 'selected' : ''}`} key={category.name}><button type="button" onClick={() => setConfigCategory(category.name)}>{category.name}<small>{category.subcategories.length} subcategoria(s)</small></button><button type="button" aria-label={`Excluir ${category.name}`} onClick={() => { if (window.confirm(`Excluir a categoria "${category.name}"?`)) { setCurrentCategories(old => old.filter(c => c.name !== category.name)); if (configCategory === category.name) setConfigCategory(''); } }}>⌫</button></div>)}{currentCategories.length === 0 && <p className="settings-empty">Nenhuma categoria cadastrada.</p>}</div>
+              <div className="settings-subcategories"><h3>{configCategory || 'Selecione uma categoria'}</h3><p>As subcategorias ajudam a detalhar melhor cada tarefa.</p>{currentCategories.find(c => c.name === configCategory)?.subcategories.map(sub => <div className="settings-sub-row" key={sub}><span>{sub}</span><button type="button" onClick={() => setCurrentCategories(old => old.map(c => c.name === configCategory ? {...c, subcategories:c.subcategories.filter(x => x !== sub)} : c))}>Excluir</button></div>)}{configCategory && <button className="secondary-action" type="button" onClick={() => { setCategoryNameDraft(''); setCategoryDialog('subcategory'); }}>＋ Adicionar subcategoria</button>}</div>
+            </div> : <div className="settings-category-list settings-date-category-list">{currentDateCategories.map(category => <div className="settings-category-row" key={category}><button type="button" onClick={() => setConfigCategory(category)}>{category}<small>Categoria de data importante</small></button><button type="button" aria-label={`Excluir ${category}`} onClick={() => { if (window.confirm(`Excluir a categoria "${category}"?`)) setCurrentDateCategories(old => old.filter(item => item !== category)); }}>⌫</button></div>)}{currentDateCategories.length === 0 && <p className="settings-empty">Nenhuma categoria cadastrada.</p>}</div>}
           </div>
         </section>}
 
@@ -806,5 +820,7 @@ export default function App() {
       </div>}<div className="modal-actions"><button type="button" className="cancel-button" onClick={() => { setModal(null); setEditingTaskId(null); }}>Cancelar</button><button className="primary-button" type="submit">{editingTaskId ? 'Salvar alterações' : 'Salvar tarefa'}</button></div></form></div>}
 
     {modal === 'date' && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setModal(null); }}><form className="task-modal" onSubmit={addImportantDate}><div className="modal-top"><div><span className="eyebrow">GUARDE A DATA</span><h2>Nova data importante</h2></div><button type="button" className="close-modal" onClick={() => setModal(null)}>×</button></div><label>Nome da data<input name="title" placeholder="Ex.: Aniversário, reunião, evento..." required autoFocus/></label><div className="form-two"><label>Data<input name="date" type="date" defaultValue={selectedDate} onChange={event => { if (repeatUntil < event.target.value) setRepeatUntil(event.target.value); }} required/></label><label>Categoria<select name="category" defaultValue={currentDateCategories[0] || 'Outros'}>{currentDateCategories.map(category => <option key={category} value={category}>{category}</option>)}</select></label></div><div className="recurrence-box"><label className="recurrence-toggle"><input type="checkbox" checked={recurring} onChange={event => { setRecurring(event.target.checked); setRepeatDays([]); }}/> <span><b>Repetir esta data</b><small>Escolha a frequência da repetição</small></span></label>{recurring && <div className="recurrence-options"><label>Frequência<select value={repeatType} onChange={event => setRepeatType(event.target.value as 'weekly' | 'monthly' | 'yearly')}><option value="weekly">Semanalmente</option><option value="monthly">Mensalmente</option><option value="yearly">Anualmente</option></select></label>{repeatType === 'weekly' && <><span className="field-caption">Repetir toda semana nos dias:</span><div className="weekday-picker">{weekdays.map((day, index) => <button type="button" key={day} className={repeatDays.includes(index) ? 'day-selected' : ''} onClick={() => toggleRepeatDay(index)}>{day}</button>)}</div></>}{repeatType === 'monthly' && <small className="recurrence-hint">A data será repetida no mesmo dia de cada mês.</small>}{repeatType === 'yearly' && <small className="recurrence-hint">A data será repetida no mesmo dia e mês, todos os anos.</small>}<label>Repetir até<input name="until" type="date" min={selectedDate} value={repeatUntil} onChange={event => setRepeatUntil(event.target.value)}/></label></div>}</div><label>Observações<textarea name="note" rows={3} placeholder="Detalhes adicionais (opcional)"/></label><div className="modal-actions"><button type="button" className="cancel-button" onClick={() => setModal(null)}>Cancelar</button><button className="primary-button" type="submit">Salvar data</button></div></form></div>}
+    {categoryDialog && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setCategoryDialog(null); }}><form className="task-modal category-dialog" onSubmit={saveCategoryDialog}><div className="modal-top"><div><span className="eyebrow">CONFIGURAÇÕES DO PLANNER</span><h2>{categoryDialog === 'category' ? 'Adicionar categoria' : 'Adicionar subcategoria'}</h2></div><button type="button" className="close-modal" onClick={() => setCategoryDialog(null)}>×</button></div><p className="category-dialog-description">{categoryDialog === 'category' ? `A categoria ficará disponível em ${configCategoryType.toLowerCase()} do Planner ${activePlanner.toLowerCase()}.` : `A subcategoria será adicionada em “${configCategory}”.`}</p><label>Nome<input value={categoryNameDraft} onChange={event => setCategoryNameDraft(event.target.value)} placeholder={categoryDialog === 'category' ? 'Digite o nome da categoria' : 'Digite o nome da subcategoria'} required autoFocus maxLength={45}/></label><div className="modal-actions"><button type="button" className="cancel-button" onClick={() => setCategoryDialog(null)}>Cancelar</button><button className="primary-button" type="submit">Salvar</button></div></form></div>}
+
   </div>;
 }
