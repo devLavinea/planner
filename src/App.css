@@ -541,3 +541,51 @@ body, button, input, select, textarea { font-size: 15px; }
 .filter-pills button.selected{background:#12366f;color:#fff;box-shadow:0 4px 12px rgba(8,46,112,.18)}
 .notification-toggle{color:#17396f!important}
 .notification-toggle.notifications-on{background:#e6f2ff!important;color:#12366f!important;box-shadow:inset 0 0 0 1px #b9d2f2}
+
+/* Menu mobile compacto e navegação em gaveta */
+.mobile-menu-toggle,.mobile-page-title,.mobile-menu-backdrop{display:none}
+@media(max-width:760px){
+  .app-shell{display:block;min-height:100vh;overflow-x:hidden}
+  .mobile-menu-backdrop{display:block;position:fixed;inset:0;z-index:1000;border:0;background:rgba(8,20,43,.42);backdrop-filter:blur(2px)}
+  .sidebar{position:fixed!important;z-index:1001;inset:0 auto 0 0;width:min(82vw,300px)!important;height:100dvh;min-height:100dvh!important;padding:20px 16px!important;display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:10px!important;overflow-y:auto!important;overflow-x:hidden!important;background:#001955!important;box-shadow:16px 0 45px rgba(0,15,48,.2);transform:translateX(-110%);transition:transform .24s ease;visibility:hidden}
+  .sidebar.mobile-menu-open{transform:translateX(0);visibility:visible}
+  .sidebar .brand{width:100%;min-width:0;height:76px;min-height:76px;margin:0 0 18px;padding:0 8px;display:flex;justify-content:flex-start;border-bottom:1px solid rgba(255,255,255,.14)}
+  .sidebar .brand-logo{width:145px;height:68px;object-fit:contain;object-position:left center}
+  .sidebar .nav-link{width:100%;min-width:0;height:50px;justify-content:flex-start;gap:13px;margin:0;padding:0 15px!important;border-radius:12px;font-size:15px!important;color:#e8f0ff}
+  .sidebar .nav-link>span{display:inline-flex!important;width:22px;justify-content:center;font-size:21px!important}
+  .sidebar .nav-link.active{background:#eaf2ff!important;color:#001955!important}
+  .sidebar .nav-link.active>span{color:#1455b8!important}
+  .sidebar .sidebar-bottom{display:block;margin-top:auto;padding-top:24px}
+  .sidebar .upgrade-card{margin-bottom:14px}
+  .topbar{position:sticky;top:0;z-index:50;min-height:62px!important;height:62px!important;padding:8px 13px!important;display:flex;align-items:center;gap:12px;background:linear-gradient(105deg,#edf5ff,#cfe3ff 70%,#174a91)!important;box-shadow:0 2px 12px rgba(18,48,90,.07)}
+  .mobile-menu-toggle{display:flex;flex:0 0 40px;width:40px;height:40px;padding:10px 9px;border:1px solid rgba(18,54,111,.15);border-radius:11px;background:rgba(255,255,255,.72);flex-direction:column;justify-content:center;gap:5px;cursor:pointer}
+  .mobile-menu-toggle span{display:block;width:20px;height:2px;border-radius:2px;background:#12366f}
+  .mobile-page-title{display:block;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#12366f;font-size:15px;font-weight:800}
+  .topbar .breadcrumb{display:none}
+  .top-actions{width:auto!important;margin-left:auto;gap:7px}
+  .account-wrap{padding:0!important}
+  .account-button{min-height:40px!important;padding:3px 6px!important;gap:6px}
+  .account-name{display:none!important}
+  .account-button .chevron{display:none}
+  .content{padding:17px 12px 24px!important}
+  .welcome-row{align-items:flex-start;flex-direction:column;gap:13px}
+  .welcome-row>div:first-child{width:100%;min-width:0}
+  .welcome-row h1{font-size:clamp(24px,6vw,30px)!important;line-height:1.2}
+  .welcome-row .muted{font-size:12px!important;line-height:1.5}
+  .planner-switch{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .planner-switch button{min-width:0;padding:10px 7px!important;font-size:11px!important}
+  .annotation-actions{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .annotation-actions button{min-width:0;white-space:normal!important;font-size:11px!important;padding:10px 8px!important}
+  .annotation-actions .voice-button{grid-column:1/-1}
+  .panel{padding:13px!important;border-radius:15px!important}
+  .dashboard-main-grid,.dashboard-stats-row{gap:10px!important}
+}
+@media(max-width:390px){
+  .topbar{padding-inline:9px!important;gap:8px}
+  .mobile-page-title{font-size:13px}
+  .mobile-menu-toggle{width:36px;height:36px;flex-basis:36px}
+  .account-button .avatar{width:31px!important;height:31px!important}
+  .content{padding-inline:9px!important}
+  .welcome-row h1{font-size:23px!important}
+}
+@media(prefers-reduced-motion:reduce){.sidebar{transition:none!important}}
