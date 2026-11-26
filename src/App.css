@@ -533,3 +533,11 @@ body, button, input, select, textarea { font-size: 15px; }
 .category-color-picker input[type=color]{width:48px;height:38px;padding:3px;border:1px solid #dce3ef;border-radius:9px;background:#fff;cursor:pointer}
 .category-color-picker span{font-size:12px;font-weight:700;color:#53627a;letter-spacing:.04em}
 .category-color-picker-label>small{color:#8792a5;font-size:11px;font-weight:400}
+
+/* Filtros de anotações com a mesma identidade azul-marinho das categorias */
+.filter-pills{background:#edf4ff;border:1px solid #dce8f8;border-radius:12px}
+.filter-pills button{color:#17396f;font-weight:800;border-radius:9px;padding:9px 13px}
+.filter-pills button:hover{background:#e1ecfb;color:#12366f}
+.filter-pills button.selected{background:#12366f;color:#fff;box-shadow:0 4px 12px rgba(8,46,112,.18)}
+.notification-toggle{color:#17396f!important}
+.notification-toggle.notifications-on{background:#e6f2ff!important;color:#12366f!important;box-shadow:inset 0 0 0 1px #b9d2f2}

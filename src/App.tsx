@@ -78,6 +78,7 @@ export default function App() {
   const [importantDateDraftDate, setImportantDateDraftDate] = useState(dateKey(today));
   const [calendarView, setCalendarView] = useState<'Mês' | 'Semana' | 'Dia'>('Mês');
   const [notice, setNotice] = useState('');
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem('planner-notifications-enabled') === 'true');
   const [filter, setFilter] = useState<'Tudo' | 'Tarefas' | 'Datas importantes'>('Tudo');
   const [recurring, setRecurring] = useState(false);
   const [repeatDays, setRepeatDays] = useState<number[]>([]);
@@ -454,6 +455,49 @@ export default function App() {
     setNotice(message);
     window.setTimeout(() => setNotice(''), 3200);
   }
+
+  async function toggleNotifications() {
+    if (notificationsEnabled) {
+      setNotificationsEnabled(false);
+      localStorage.setItem('planner-notifications-enabled', 'false');
+      showNotice('Notificações desativadas.');
+      return;
+    }
+    if (!("Notification" in window)) {
+      showNotice('Este navegador não oferece suporte a notificações.');
+      return;
+    }
+    let permission = Notification.permission;
+    if (permission === 'default') permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      showNotice('Permita as notificações nas configurações do navegador para ativá-las.');
+      return;
+    }
+    setNotificationsEnabled(true);
+    localStorage.setItem('planner-notifications-enabled', 'true');
+    showNotice('Notificações ativadas gratuitamente neste navegador.');
+    new Notification('Planner ativado', { body: 'Você receberá avisos de tarefas e datas importantes enquanto o Planner estiver aberto.' });
+  }
+
+  useEffect(() => {
+    if (!notificationsEnabled || !("Notification" in window) || Notification.permission !== 'granted') return;
+    const checkReminders = () => {
+      const now = new Date();
+      const todayKey = dateKey(now);
+      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const alreadySent: string[] = (() => { try { return JSON.parse(localStorage.getItem('planner-notification-history') || '[]'); } catch { return []; } })();
+      const reminders = [
+        ...plannerTasks.filter(task => !task.done && task.date === todayKey && (task.time || '09:00') === currentTime).map(task => ({ id: `task:${task.id}:${task.date}`, title: task.title, body: `Tarefa agendada para ${task.time || '09:00'}.` })),
+        ...(currentTime === '09:00' ? plannerDates.filter(item => item.date === todayKey).map(item => ({ id: `date:${item.id}:${item.date}`, title: item.title, body: 'Hoje é uma data importante cadastrada no seu Planner.' })) : [])
+      ];
+      const fresh = reminders.filter(item => !alreadySent.includes(item.id));
+      fresh.forEach(item => new Notification(item.title, { body: item.body, tag: item.id }));
+      if (fresh.length) localStorage.setItem('planner-notification-history', JSON.stringify([...alreadySent, ...fresh.map(item => item.id)].slice(-500)));
+    };
+    checkReminders();
+    const timer = window.setInterval(checkReminders, 15000);
+    return () => window.clearInterval(timer);
+  }, [notificationsEnabled, plannerTasks, plannerDates]);
 
   async function toggleTask(id: string) {
     const task = tasks.find(item => item.id === id);
@@ -839,7 +883,7 @@ export default function App() {
     </aside>
 
     <main className="main-area">
-      <header className="topbar"><div className="breadcrumb">Planner <span>/</span> <b>{section}</b></div><div className="top-actions"><button className="icon-button" title="Notificações" onClick={() => showNotice('As notificações serão configuradas em uma próxima etapa.')}>♧</button><div className="account-wrap"><button className="account-button" onClick={() => setSwitchOpen(!switchOpen)}><span className="avatar" style={{ background: account.color }}>{account.name.charAt(0).toUpperCase()}</span><span className="account-name"><b>{authUser?.displayName || account.name}</b><small>{activePlanner === 'Pessoal' ? 'Planner pessoal' : 'Planner profissional'}</small></span><span className="chevron">⌄</span></button>{switchOpen && <div className="account-menu"><div className="menu-heading">TROCAR DE CONTA</div>{accounts.map(item => <button key={item.id} className="account-option" onClick={() => switchAccount(item)}><span className="avatar small" style={{ background: item.color }}>{item.name.charAt(0).toUpperCase()}</span><span><b>{item.name}</b><small>{item.email}</small></span>{item.id === account.id && <em>✓</em>}</button>)}<div className="account-menu-divider"/><div className="signed-user"><span>{authUser?.displayName || authUser?.email}</span><small>Conta autenticada</small></div><button className="logout-button" onClick={logout}>↪ Sair</button></div>}</div></div></header>
+      <header className="topbar"><div className="breadcrumb">Planner <span>/</span> <b>{section}</b></div><div className="top-actions"><button className={`icon-button notification-toggle ${notificationsEnabled ? 'notifications-on' : ''}`} title={notificationsEnabled ? "Desativar notificações" : "Ativar notificações gratuitas"} aria-label={notificationsEnabled ? "Desativar notificações" : "Ativar notificações gratuitas"} onClick={toggleNotifications}>🔔</button><div className="account-wrap"><button className="account-button" onClick={() => setSwitchOpen(!switchOpen)}><span className="avatar" style={{ background: account.color }}>{account.name.charAt(0).toUpperCase()}</span><span className="account-name"><b>{authUser?.displayName || account.name}</b><small>{activePlanner === 'Pessoal' ? 'Planner pessoal' : 'Planner profissional'}</small></span><span className="chevron">⌄</span></button>{switchOpen && <div className="account-menu"><div className="menu-heading">TROCAR DE CONTA</div>{accounts.map(item => <button key={item.id} className="account-option" onClick={() => switchAccount(item)}><span className="avatar small" style={{ background: item.color }}>{item.name.charAt(0).toUpperCase()}</span><span><b>{item.name}</b><small>{item.email}</small></span>{item.id === account.id && <em>✓</em>}</button>)}<div className="account-menu-divider"/><div className="signed-user"><span>{authUser?.displayName || authUser?.email}</span><small>Conta autenticada</small></div><button className="logout-button" onClick={logout}>↪ Sair</button></div>}</div></div></header>
 
       <div className="content">      {!firebaseReady && <p className="firebase-status">Conectando ao Firebase...</p>}       {firebaseError && <p className="firebase-error">Falha na conexão com o Firebase: {firebaseError}</p>}
         <section className="welcome-row"><div><div className="eyebrow">{today.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div><h1>{section === 'Visão geral' ? `Olá, ${account.name}!` : section}<span className="wave">✦</span></h1><p className="muted">{section === 'Visão geral' ? 'Pequenos passos todos os dias fazem uma grande diferença.' : section === 'Anotações' ? 'Guarde suas tarefas e datas importantes em um só lugar.' : 'Personalize as categorias do planner selecionado.'}</p><div className={`planner-switch ${activePlanner === 'Profissional' ? 'professional' : 'personal'}`}><button className={activePlanner === 'Pessoal' ? 'active' : ''} onClick={() => { setActivePlanner('Pessoal'); setConfigCategory(personalCategories[0]?.name || ''); setTaskCategorySelection(personalCategories[0]?.name || ''); }}>◉ Planner pessoal</button><button className={activePlanner === 'Profissional' ? 'active' : ''} onClick={() => { setActivePlanner('Profissional'); setConfigCategory(professionalCategories[0]?.name || ''); setTaskCategorySelection(professionalCategories[0]?.name || ''); }}>▣ Planner profissional</button></div></div><div className="annotation-actions">{section === 'Anotações' && <button className={`voice-button ${listening ? 'listening' : ''}`} onClick={startVoiceCommand}><span>🎙</span>{listening ? 'Ouvindo...' : 'Comando de voz'}</button>}{section === 'Anotações' && <><button className="secondary-action" onClick={openImportantDateModal}>＋ Data importante</button><button className="primary-button" onClick={openTaskModal}>＋ Nova tarefa</button></>}</div></section>
