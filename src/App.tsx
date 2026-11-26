@@ -9,7 +9,7 @@ import './App.css';
 type Priority = 'Baixa' | 'Média' | 'Alta';
 type PlannerType = 'Pessoal' | 'Profissional';
 type Task = { id: string; title: string; date: string; time: string; category: string; subcategory?: string; professor?: string; priority: Priority; done: boolean; note: string; planner: PlannerType; accountId: string; userId: string; seriesId?: string };
-type ImportantDate = { id: string; title: string; date: string; note: string; category: string; planner: PlannerType; accountId: string; userId: string; seriesId?: string };
+type ImportantDate = { id: string; title: string; date: string; note: string; category: string; planner: PlannerType; accountId: string; userId: string; seriesId?: string; recurringForever?: boolean; repeatType?: 'weekly' | 'monthly' | 'yearly'; repeatDays?: number[] };
 type Account = { id: string; name: string; email: string; color: string; ownerUid?: string };
 type TaskCategory = { name: string; subcategories: string[] };
 const defaultProfessionalCategories: TaskCategory[] = [
@@ -82,6 +82,7 @@ export default function App() {
   const [calendarMonth, setCalendarMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [taskStartDate, setTaskStartDate] = useState(dateKey(today));
   const [repeatUntil, setRepeatUntil] = useState(dateKey(today));
+  const [repeatForever, setRepeatForever] = useState(false);
   const [activePlanner, setActivePlanner] = useState<PlannerType>('Profissional');
   const [voiceDraft, setVoiceDraft] = useState<{ title: string; date: string; time: string; planner: PlannerType } | null>(null);
   const [listening, setListening] = useState(false);
@@ -375,7 +376,37 @@ export default function App() {
   }, [authUser?.uid]);
 
   const plannerTasks = tasks.filter(task => task.accountId === account.id && task.planner === activePlanner);
-  const plannerDates = importantDates.filter(item => item.accountId === account.id && item.planner === activePlanner);
+  const storedPlannerDates = importantDates.filter(item => item.accountId === account.id && item.planner === activePlanner);
+  const displayStartYear = Math.min(today.getFullYear(), calendarMonth.getFullYear());
+  const displayEndYear = Math.max(today.getFullYear(), calendarMonth.getFullYear()) + 5;
+  const plannerDates = storedPlannerDates.flatMap(item => {
+    if (!item.recurringForever || !item.repeatType) return [item];
+    const initial = new Date(`${item.date}T12:00:00`);
+    const occurrences: ImportantDate[] = [];
+    const startYear = Math.max(initial.getFullYear(), displayStartYear);
+    for (let year = startYear; year <= displayEndYear; year++) {
+      const monthStart = item.repeatType === 'yearly' ? initial.getMonth() : 0;
+      const monthEnd = item.repeatType === 'yearly' ? initial.getMonth() : 11;
+      for (let month = monthStart; month <= monthEnd; month++) {
+        const day = item.repeatType === 'weekly' ? 1 : initial.getDate();
+        const lastDay = new Date(year, month + 1, 0).getDate();
+        if (item.repeatType === 'weekly') {
+          const first = new Date(year, 0, 1, 12);
+          const last = new Date(year, 11, 31, 12);
+          for (const cursor = new Date(first); cursor <= last; cursor.setDate(cursor.getDate() + 1)) {
+            if (cursor >= initial && (item.repeatDays || []).includes(cursor.getDay())) {
+              const date = dateKey(cursor);
+              occurrences.push({ ...item, id: `${item.id}_${date}`, date });
+            }
+          }
+          break;
+        }
+        const date = dateKey(new Date(year, month, Math.min(day, lastDay), 12));
+        if (date >= item.date) occurrences.push({ ...item, id: `${item.id}_${date}`, date });
+      }
+    }
+    return occurrences;
+  });
   //const pending = plannerTasks.filter(task => !task.done);
   const completed = plannerTasks.filter(task => task.done);
   const filteredTasks = plannerTasks;
@@ -505,9 +536,9 @@ export default function App() {
     const form = new FormData(event.currentTarget);
     const title = String(form.get('title') || '').trim();
     const start = String(form.get('date') || '');
-    const end = recurring ? String(form.get('until') || start) : start;
+    const end = recurring && !repeatForever ? String(form.get('until') || start) : start;
     if (!title || !start) return;
-    if (recurring && end < start) {
+    if (recurring && !repeatForever && end < start) {
       showNotice('A data final precisa ser igual ou posterior à data inicial.');
       return;
     }
@@ -524,7 +555,9 @@ export default function App() {
       userId: authUser!.uid,
     };
     const newDates: ImportantDate[] = [];
-    if (recurring) {
+    if (recurring && repeatForever) {
+      newDates.push({ id: crypto.randomUUID(), date: start, recurringForever: true, repeatType, repeatDays: [...repeatDays], ...base });
+    } else if (recurring) {
       const cursor = new Date(`${start}T12:00:00`);
       const last = new Date(`${end}T12:00:00`);
       const initial = new Date(`${start}T12:00:00`);
@@ -555,8 +588,9 @@ export default function App() {
     }
     setModal(null);
     setRecurring(false);
+    setRepeatForever(false);
     setRepeatDays([]);
-    showNotice(recurring ? `Data importante recorrente criada com ${newDates.length} ocorrência(s).` : 'Data importante adicionada.');
+    showNotice(recurring ? (repeatForever ? 'Data importante configurada para repetir sempre, sem data final.' : `Data importante recorrente criada com ${newDates.length} ocorrência(s).`) : 'Data importante adicionada.');
   }
 
 
@@ -819,7 +853,7 @@ export default function App() {
         {recurring && <div className="recurrence-options"><label>Frequência<select value={repeatType} onChange={event => setRepeatType(event.target.value as 'weekly' | 'monthly' | 'yearly')}><option value="weekly">Semanalmente</option><option value="monthly">Mensalmente</option><option value="yearly">Anualmente</option></select></label>{repeatType === 'weekly' && <><span className="field-caption">Repetir toda semana nos dias:</span><div className="weekday-picker">{weekdays.map((day, index) => <button type="button" key={day} className={repeatDays.includes(index) ? 'day-selected' : ''} onClick={() => toggleRepeatDay(index)}>{day}</button>)}</div></>}{repeatType === 'monthly' && <small className="recurrence-hint">A tarefa será repetida todo dia {Number(taskStartDate.slice(8, 10))} de cada mês.</small>}{repeatType === 'yearly' && <small className="recurrence-hint">A tarefa será repetida todo dia {Number(taskStartDate.slice(8, 10))} de {new Date(`${taskStartDate}T12:00:00`).toLocaleDateString('pt-BR', { month: 'long' })}, todos os anos.</small>}<label>Repetir até<input name="until" type="date" min={taskStartDate} value={repeatUntil} onChange={event => setRepeatUntil(event.target.value)}/></label><small className="recurrence-hint">{repeatType === 'weekly' ? 'Serão criadas tarefas nos dias da semana selecionados.' : repeatType === 'monthly' ? 'Serão criadas tarefas no mesmo dia de cada mês, até a data final.' : 'Serão criadas tarefas na mesma data, todos os anos, até a data final.'}</small></div>}
       </div>}<div className="modal-actions"><button type="button" className="cancel-button" onClick={() => { setModal(null); setEditingTaskId(null); }}>Cancelar</button><button className="primary-button" type="submit">{editingTaskId ? 'Salvar alterações' : 'Salvar tarefa'}</button></div></form></div>}
 
-    {modal === 'date' && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setModal(null); }}><form className="task-modal" onSubmit={addImportantDate}><div className="modal-top"><div><span className="eyebrow">GUARDE A DATA</span><h2>Nova data importante</h2></div><button type="button" className="close-modal" onClick={() => setModal(null)}>×</button></div><label>Nome da data<input name="title" placeholder="Ex.: Aniversário, reunião, evento..." required autoFocus/></label><div className="form-two"><label>Data<input name="date" type="date" defaultValue={selectedDate} onChange={event => { if (repeatUntil < event.target.value) setRepeatUntil(event.target.value); }} required/></label><label>Categoria<select name="category" defaultValue={currentDateCategories[0] || 'Outros'}>{currentDateCategories.map(category => <option key={category} value={category}>{category}</option>)}</select></label></div><div className="recurrence-box"><label className="recurrence-toggle"><input type="checkbox" checked={recurring} onChange={event => { setRecurring(event.target.checked); setRepeatDays([]); }}/> <span><b>Repetir esta data</b><small>Escolha a frequência da repetição</small></span></label>{recurring && <div className="recurrence-options"><label>Frequência<select value={repeatType} onChange={event => setRepeatType(event.target.value as 'weekly' | 'monthly' | 'yearly')}><option value="weekly">Semanalmente</option><option value="monthly">Mensalmente</option><option value="yearly">Anualmente</option></select></label>{repeatType === 'weekly' && <><span className="field-caption">Repetir toda semana nos dias:</span><div className="weekday-picker">{weekdays.map((day, index) => <button type="button" key={day} className={repeatDays.includes(index) ? 'day-selected' : ''} onClick={() => toggleRepeatDay(index)}>{day}</button>)}</div></>}{repeatType === 'monthly' && <small className="recurrence-hint">A data será repetida no mesmo dia de cada mês.</small>}{repeatType === 'yearly' && <small className="recurrence-hint">A data será repetida no mesmo dia e mês, todos os anos.</small>}<label>Repetir até<input name="until" type="date" min={selectedDate} value={repeatUntil} onChange={event => setRepeatUntil(event.target.value)}/></label></div>}</div><label>Observações<textarea name="note" rows={3} placeholder="Detalhes adicionais (opcional)"/></label><div className="modal-actions"><button type="button" className="cancel-button" onClick={() => setModal(null)}>Cancelar</button><button className="primary-button" type="submit">Salvar data</button></div></form></div>}
+    {modal === 'date' && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setModal(null); }}><form className="task-modal" onSubmit={addImportantDate}><div className="modal-top"><div><span className="eyebrow">GUARDE A DATA</span><h2>Nova data importante</h2></div><button type="button" className="close-modal" onClick={() => setModal(null)}>×</button></div><label>Nome da data<input name="title" placeholder="Ex.: Aniversário, reunião, evento..." required autoFocus/></label><div className="form-two"><label>Data<input name="date" type="date" defaultValue={selectedDate} onChange={event => { if (repeatUntil < event.target.value) setRepeatUntil(event.target.value); }} required/></label><label>Categoria<select name="category" defaultValue={currentDateCategories[0] || 'Outros'}>{currentDateCategories.map(category => <option key={category} value={category}>{category}</option>)}</select></label></div><div className="recurrence-box"><label className="recurrence-toggle"><input type="checkbox" checked={recurring} onChange={event => { setRecurring(event.target.checked); setRepeatDays([]); }}/> <span><b>Repetir esta data</b><small>Escolha a frequência da repetição</small></span></label>{recurring && <div className="recurrence-options"><label>Frequência<select value={repeatType} onChange={event => setRepeatType(event.target.value as 'weekly' | 'monthly' | 'yearly')}><option value="weekly">Semanalmente</option><option value="monthly">Mensalmente</option><option value="yearly">Anualmente</option></select></label>{repeatType === 'weekly' && <><span className="field-caption">Repetir toda semana nos dias:</span><div className="weekday-picker">{weekdays.map((day, index) => <button type="button" key={day} className={repeatDays.includes(index) ? 'day-selected' : ''} onClick={() => toggleRepeatDay(index)}>{day}</button>)}</div></>}{repeatType === 'monthly' && <small className="recurrence-hint">A data será repetida no mesmo dia de cada mês.</small>}{repeatType === 'yearly' && <small className="recurrence-hint">A data será repetida no mesmo dia e mês, todos os anos.</small>}<label className="recurrence-toggle"><input type="checkbox" checked={repeatForever} onChange={event => setRepeatForever(event.target.checked)}/> <span><b>Repetir sempre</b><small>Sem data final: a data continuará se repetindo enquanto você usar o Planner.</small></span></label>{!repeatForever && <label>Repetir até<input name="until" type="date" min={selectedDate} value={repeatUntil} onChange={event => setRepeatUntil(event.target.value)}/></label>}</div>}</div><label>Observações<textarea name="note" rows={3} placeholder="Detalhes adicionais (opcional)"/></label><div className="modal-actions"><button type="button" className="cancel-button" onClick={() => setModal(null)}>Cancelar</button><button className="primary-button" type="submit">Salvar data</button></div></form></div>}
     {categoryDialog && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setCategoryDialog(null); }}><form className="task-modal category-dialog" onSubmit={saveCategoryDialog}><div className="modal-top"><div><span className="eyebrow">CONFIGURAÇÕES DO PLANNER</span><h2>{categoryDialog === 'category' ? 'Adicionar categoria' : 'Adicionar subcategoria'}</h2></div><button type="button" className="close-modal" onClick={() => setCategoryDialog(null)}>×</button></div><p className="category-dialog-description">{categoryDialog === 'category' ? `A categoria ficará disponível em ${configCategoryType.toLowerCase()} do Planner ${activePlanner.toLowerCase()}.` : `A subcategoria será adicionada em “${configCategory}”.`}</p><label>Nome<input value={categoryNameDraft} onChange={event => setCategoryNameDraft(event.target.value)} placeholder={categoryDialog === 'category' ? 'Digite o nome da categoria' : 'Digite o nome da subcategoria'} required autoFocus maxLength={45}/></label><div className="modal-actions"><button type="button" className="cancel-button" onClick={() => setCategoryDialog(null)}>Cancelar</button><button className="primary-button" type="submit">Salvar</button></div></form></div>}
 
   </div>;
