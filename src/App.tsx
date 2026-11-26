@@ -818,6 +818,23 @@ export default function App() {
   const currentDateCategories = activePlanner === 'Profissional' ? professionalDateCategories : personalDateCategories;
   const setCurrentDateCategories = activePlanner === 'Profissional' ? setProfessionalDateCategories : setPersonalDateCategories;
 
+  function changeCalendarPeriod(direction: -1 | 1) {
+    if (calendarView === 'Mês') {
+      const nextMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + direction, 1);
+      const selectedDay = Number(selectedDate.slice(8, 10));
+      const lastDay = new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0).getDate();
+      nextMonth.setDate(Math.min(selectedDay, lastDay));
+      setCalendarMonth(new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1));
+      setSelectedDate(dateKey(nextMonth));
+      return;
+    }
+
+    const nextDate = new Date(`${selectedDate}T12:00:00`);
+    nextDate.setDate(nextDate.getDate() + direction * (calendarView === 'Semana' ? 7 : 1));
+    setSelectedDate(dateKey(nextDate));
+    setCalendarMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1));
+  }
+
   function saveCategoryDialog(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const name = categoryNameDraft.trim();
@@ -894,7 +911,7 @@ export default function App() {
           <div className="dashboard-main-grid">
             <section className="panel calendar-panel">
               <div className="panel-header calendar-heading"><div className="calendar-title-wrap"><span className="calendar-title-icon">▦</span><div><h2>Calendário</h2><p>Visualize suas tarefas e datas importantes.</p></div></div>
-                <div className="calendar-toolbar"><div className="calendar-view-switch">{(['Mês','Semana','Dia'] as const).map(view => <button key={view} className={calendarView === view ? 'active' : ''} onClick={() => setCalendarView(view)}>{view}</button>)}</div><div className="calendar-controls"><button aria-label="Período anterior" onClick={() => { const d = new Date(`${selectedDate}T12:00:00`); d.setDate(d.getDate() + (calendarView === 'Mês' ? -new Date(d.getFullYear(),d.getMonth(),1).getDate() : calendarView === 'Semana' ? -7 : -1)); setSelectedDate(dateKey(d)); setCalendarMonth(new Date(d.getFullYear(),d.getMonth(),1)); }}>‹</button><strong>{calendarView === 'Mês' ? calendarMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : calendarView === 'Semana' ? `Semana de ${new Date(`${selectedDate}T12:00:00`).toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}` : dateLabel(selectedDate)}</strong><button aria-label="Próximo período" onClick={() => { const d = new Date(`${selectedDate}T12:00:00`); d.setDate(d.getDate() + (calendarView === 'Mês' ? 32 : calendarView === 'Semana' ? 7 : 1)); setSelectedDate(dateKey(d)); setCalendarMonth(new Date(d.getFullYear(),d.getMonth(),1)); }}>›</button><button className="today-button" onClick={() => { setCalendarMonth(new Date(today.getFullYear(), today.getMonth(), 1)); setSelectedDate(dateKey(today)); }}>Hoje</button></div></div>
+                <div className="calendar-toolbar"><div className="calendar-view-switch">{(['Mês','Semana','Dia'] as const).map(view => <button key={view} className={calendarView === view ? 'active' : ''} onClick={() => setCalendarView(view)}>{view}</button>)}</div><div className="calendar-controls"><button aria-label="Período anterior" onClick={() => changeCalendarPeriod(-1)}>‹</button><strong>{calendarView === 'Mês' ? calendarMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : calendarView === 'Semana' ? `Semana de ${new Date(`${selectedDate}T12:00:00`).toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}` : dateLabel(selectedDate)}</strong><button aria-label="Próximo período" onClick={() => changeCalendarPeriod(1)}>›</button><button className="today-button" onClick={() => { setCalendarMonth(new Date(today.getFullYear(), today.getMonth(), 1)); setSelectedDate(dateKey(today)); }}>Hoje</button></div></div>
               </div>
               {calendarView !== 'Dia' && <div className="calendar-grid calendar-weekdays">{weekdays.map(day => <div key={day}>{day}</div>)}</div>}
               <div className={`calendar-grid ${calendarView !== 'Mês' ? 'calendar-focused-view' : ''} ${calendarView === 'Dia' ? 'calendar-day-view' : ''}`}>{visibleCalendarCells.map(cell => <button key={cell.key} className={`calendar-day ${!cell.inMonth ? 'outside-month' : ''} ${cell.key === dateKey(today) ? 'is-today' : ''} ${cell.key === selectedDate ? 'is-selected' : ''}`} onClick={() => { setSelectedDate(cell.key); setTaskStartDate(cell.key); }}>

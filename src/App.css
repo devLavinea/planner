@@ -589,3 +589,12 @@ body, button, input, select, textarea { font-size: 15px; }
   .welcome-row h1{font-size:23px!important}
 }
 @media(prefers-reduced-motion:reduce){.sidebar{transition:none!important}}
+
+/* Dashboard mobile: ocultar cartões secundários sem alterar a versão desktop. */
+@media (max-width: 760px) {
+  .motivation-card,
+  .upcoming-dates-card,
+  .dashboard-stats-row {
+    display: none !important;
+  }
+}
